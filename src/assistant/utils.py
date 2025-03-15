@@ -4,6 +4,11 @@ from typing import Dict, Any, List, Optional
 from langsmith import traceable
 from tavily import TavilyClient
 from duckduckgo_search import DDGS
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from sentence_transformers import SentenceTransformer
+from langchain_community.vectorstores import Qdrant
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 def deduplicate_and_format_sources(search_response, max_tokens_per_source, include_raw_content=False):
     """
@@ -226,3 +231,116 @@ def perplexity_search(query: str, perplexity_search_loop_count: int) -> Dict[str
         })
     
     return {"results": results}
+
+@traceable
+def setup_qdrant_client(collection_name="research_documents"):
+    """Set up and return a QdrantClient instance.
+    
+    Args:
+        collection_name (str): Name of the collection to use
+        
+    Returns:
+        QdrantClient: Configured QdrantClient instance
+    """
+    # Get connection details from environment variables or use defaults
+    host = os.getenv("QDRANT_HOST", "localhost")
+    port = int(os.getenv("QDRANT_PORT", "6333"))
+    
+    # Create client
+    client = QdrantClient(host=host, port=port)
+    
+    # Check if collection exists, create it if not
+    collections = client.get_collections().collections
+    collection_names = [collection.name for collection in collections]
+    
+    if collection_name not in collection_names:
+        # Define the dimensionality of your embeddings
+        # 384 is the dimension for 'all-MiniLM-L6-v2'
+        embedding_size = 384
+        
+        # Create the collection
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=models.VectorParams(
+                size=embedding_size,
+                distance=models.Distance.COSINE
+            )
+        )
+        print(f"Created new collection: {collection_name}")
+    
+    return client
+
+@traceable
+def get_embeddings_model():
+    """Get the embeddings model.
+    
+    Returns:
+        HuggingFaceEmbeddings: Configured embeddings model
+    """
+    # Use a small but effective model
+    model_name = os.getenv("EMBEDDINGS_MODEL", "all-MiniLM-L6-v2")
+    
+    # Create embeddings instance
+    embeddings = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}
+    )
+    
+    return embeddings
+
+@traceable
+def query_qdrant(query, collection_name="research_documents", top_k=5):
+    """Query the QDrant vector store with the given query.
+    
+    Args:
+        query (str): The query to search for
+        collection_name (str): Name of the collection to search
+        top_k (int): Number of results to return
+        
+    Returns:
+        dict: Search response containing:
+            - results (list): List of search result dictionaries, each containing:
+                - title (str): Title of the document
+                - url (str): URL or source identifier
+                - content (str): Snippet/summary of the content
+                - raw_content (str): Full content of the document
+    """
+    try:
+        # Get client and embeddings
+        client = setup_qdrant_client(collection_name)
+        embeddings = get_embeddings_model()
+        
+        # Create Qdrant wrapper
+        qdrant = Qdrant(
+            client=client,
+            collection_name=collection_name,
+            embeddings=embeddings,
+        )
+        
+        # Search for similar documents
+        docs = qdrant.similarity_search_with_score(query, k=top_k)
+        
+        # Format results
+        results = []
+        for doc, score in docs:
+            # Extract metadata
+            metadata = doc.metadata
+            title = metadata.get("title", "Untitled Document")
+            url = metadata.get("source", "local")
+            
+            # Create result entry
+            result = {
+                "title": title,
+                "url": url,
+                "content": doc.page_content[:200] + "...",  # Short preview
+                "raw_content": doc.page_content,
+                "score": score
+            }
+            results.append(result)
+        
+        return {"results": results}
+    
+    except Exception as e:
+        print(f"Error in QDrant search: {str(e)}")
+        return {"results": []}

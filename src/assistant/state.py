@@ -6,6 +6,7 @@ from typing_extensions import TypedDict, Annotated
 class SummaryState:
     research_topic: str = field(default=None) # Report topic     
     search_query: str = field(default=None) # Search query
+    rag_research_results: Annotated[list, operator.add] = field(default_factory=list) 
     web_research_results: Annotated[list, operator.add] = field(default_factory=list) 
     sources_gathered: Annotated[list, operator.add] = field(default_factory=list) 
     research_loop_count: int = field(default=0) # Research loop count

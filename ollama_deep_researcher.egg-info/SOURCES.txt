@@ -7,7 +7,11 @@ ollama_deep_researcher.egg-info/requires.txt
 ollama_deep_researcher.egg-info/top_level.txt
 src/assistant/__init__.py
 src/assistant/configuration.py
+src/assistant/direct_qdrant.py
 src/assistant/graph.py
 src/assistant/prompts.py
+src/assistant/qdrant_loader.py
 src/assistant/state.py
 src/assistant/utils.py
+src/assistant/utils_0.py
+src/assistant/utils_qdrant.py

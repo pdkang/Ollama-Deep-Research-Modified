@@ -153,3 +153,109 @@ URL: https://smith.langchain.com/studio/?baseUrl=http://0.0.0.0:2024
 ...but the browser will not launch from the container.
 
 Instead, visit this link with the correct baseUrl IP address: [`https://smith.langchain.com/studio/thread?baseUrl=http://127.0.0.1:2024`](https://smith.langchain.com/studio/thread?baseUrl=http://127.0.0.1:2024)
+
+
+
+===================================
+
+## Using QDrant for Local RAG
+
+This agent supports local RAG (Retrieval Augmented Generation) using QDrant vector database.
+
+### Setup QDrant
+
+1. Start QDrant (using Docker):
+   ```bash
+   docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_data:/qdrant/storage qdrant/qdrant
+   ```
+
+2. Index your documents:  (skip if you have already indexed your documents)
+   ```bash
+   python -m src.assistant.qdrant_loader --directory /path/to/your/documents --collection DnD_Documents
+   ```
+
+### Configuration
+
+Set the following environment variables to configure QDrant:
+
+- `QDRANT_HOST`: QDrant server host (default: "localhost")
+- `QDRANT_PORT`: QDrant server port (default: "6333")
+- `QDRANT_COLLECTION`: Collection name (default: "DnD_Documents")
+- `QDRANT_TOP_K`: Number of results to retrieve (default: 5)
+- `USE_RAG`: Enable/disable RAG (default: True)
+- `EMBEDDINGS_MODEL`: HuggingFace model for embeddings (default: "all-MiniLM-L6-v2")
+
+The agent will now:
+1. Generate a search query
+2. Query the local QDrant database for relevant documents
+3. Query the web for additional information
+4. Summarize both local and web sources
+5. Continue with the existing reflection and follow-up process
+
+
+===================================
+
+project_root/
+├── src/
+│   └── assistant/
+│       ├── __init__.py
+│       ├── graph.py
+│       ├── utils.py
+│       └── utils_qdrant.py
+├── reindex_dnd_feats.py
+├── simple_test_qdrant.py
+├── test_utils_qdrant.py
+└── inspect_indexed_feats.py
+
+Files Required to Run LangGraph Studio
+To run LangGraph Studio with your RAG-enabled application, you need several key files. Let me explain what each file does and which ones are essential:
+
+Essential Files
+1. src/assistant/graph.py
+- Purpose: Defines your LangGraph application structure
+- Content: Contains the graph definition, nodes, and edges
+- Importance: Critical - this is the main entry point for LangGraph Studio
+
+2. src/assistant/utils_qdrant.py
+- Purpose: Provides QDrant vector database integration
+- Content: Contains functions to query QDrant for relevant documents
+- Importance: Essential for RAG functionality
+
+3. src/assistant/utils.py
+- Purpose: Contains utility functions used by the graph
+- Content: May include helper functions, data processing, etc.
+- Importance: Essential if referenced by graph.py
+
+4. src/assistant/_init_.py
+- Purpose: Makes the assistant directory a proper Python package
+- Content: Usually empty or contains minimal imports
+- Importance: Required for proper Python package structure
+
+Supporting Files (Not Directly Used by LangGraph Studio)
+5. reindex_dnd_feats.py
+- Purpose: Indexes your D&D feats data into QDrant
+- Content: Script to process and store data in QDrant
+- Importance: Used once to set up the vector database, not needed for runtime
+
+6. inspect_indexed_feats.py
+- Purpose: Helps inspect the data in your QDrant collection
+- Content: Diagnostic tool to view indexed documents
+- Importance: Useful for debugging, not needed for runtime
+
+7. simple_test_qdrant.py
+- Purpose: Tests QDrant integration outside of LangGraph
+- Content: Simple script to verify QDrant queries work
+- Importance: Useful for testing, not needed for runtime
+
+8. test_utils_qdrant.py
+- Purpose: Tests the utils_qdrant.py functionality
+- Content: Test script for QDrant integration
+- Importance: Useful for testing, not needed for runtime
+
+Running LangGraph Studio
+
+To run LangGraph Studio with your application:
+This command:
+
+uvx --refresh --from "langgraph-cli[inmem]" --with-editable . --python 3.11 langgraph dev
+

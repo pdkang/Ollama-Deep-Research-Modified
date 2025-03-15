@@ -20,6 +20,10 @@ class Configuration:
     search_api: SearchAPI = SearchAPI(os.environ.get("SEARCH_API", SearchAPI.DUCKDUCKGO.value))  # Default to DUCKDUCKGO
     fetch_full_page: bool = os.environ.get("FETCH_FULL_PAGE", "False").lower() in ("true", "1", "t")
     ollama_base_url: str = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/")
+    # Add QDrant configuration
+    qdrant_collection: str = os.environ.get("QDRANT_COLLECTION", "DnD_Documents")
+    qdrant_top_k: int = int(os.environ.get("QDRANT_TOP_K", "5"))
+    use_rag: bool = os.environ.get("USE_RAG", "True").lower() in ("true", "1", "t")
 
     @classmethod
     def from_runnable_config(

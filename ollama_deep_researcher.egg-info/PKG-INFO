@@ -13,6 +13,8 @@ Requires-Dist: langchain-ollama>=0.2.1
 Requires-Dist: duckduckgo-search>=7.3.0
 Requires-Dist: beautifulsoup4>=4.13.3
 Requires-Dist: jupyter>=1.1.1
+Requires-Dist: qdrant-client>=1.12.1
+Requires-Dist: sentence-transformers>=3.4.1
 Provides-Extra: dev
 Requires-Dist: mypy>=1.11.1; extra == "dev"
 Requires-Dist: ruff>=0.6.1; extra == "dev"
@@ -20,17 +22,6 @@ Requires-Dist: ruff>=0.6.1; extra == "dev"
 # Ollama Deep Researcher
 
 Ollama Deep Researcher is a fully local web research assistant that uses any LLM hosted by [Ollama](https://ollama.com/search). Give it a topic and it will generate a web search query, gather web search results (via [Tavily](https://www.tavily.com/) by default), summarize the results of web search, reflect on the summary to examine knowledge gaps, generate a new search query to address the gaps, search, and improve the summary for a user-defined number of cycles. It will provide the user a final markdown summary with all sources used.
-
-![research-rabbit](https://github.com/user-attachments/assets/4308ee9c-abf3-4abb-9d1e-83e7c2c3f187)
-
-Short summary:
-<video src="https://github.com/user-attachments/assets/02084902-f067-4658-9683-ff312cab7944" controls></video>
-
-## 📺 Video Tutorials
-
-See it in action or build it yourself? Check out these helpful video tutorials:
-- [Overview of Ollama Deep Researcher with R1](https://www.youtube.com/watch?v=sGUjmyfof4Q) - Load and test [DeepSeek R1](https://api-docs.deepseek.com/news/news250120) [distilled models](https://ollama.com/library/deepseek-r1).
-- [Building Ollama Deep Researcher from Scratch](https://www.youtube.com/watch?v=XGuTzHoqlj8) - Overview of how this is built.
 
 ## 🚀 Quickstart
 
@@ -43,36 +34,7 @@ See it in action or build it yourself? Check out these helpful video tutorials:
 ollama pull deepseek-r1:8b
 ```
 
-3. Clone the repository:
-```bash
-git clone https://github.com/langchain-ai/ollama-deep-researcher.git
-cd ollama-deep-researcher
-```
-
-4. Select a web search tool:
-
-By default, it will use [DuckDuckGo](https://duckduckgo.com/) for web search, which does not require an API key. But you can also use [Tavily](https://tavily.com/) or [Perplexity](https://www.perplexity.ai/hub/blog/introducing-the-sonar-pro-api) by adding their API keys to the environment file:
-```bash
-cp .env.example .env
-```
-
-The following environment variables are supported:
-
-  * `OLLAMA_BASE_URL` - the endpoint of the Ollama service, defaults to `http://localhost:11434` if not set 
-  * `OLLAMA_MODEL` - the model to use, defaults to `llama3.2` if not set
-  * `SEARCH_API` - the search API to use, either `duckduckgo` (default) or `tavily` or `perplexity`. You need to set the corresponding API key if tavily or perplexity is used.
-  * `TAVILY_API_KEY` - the tavily API key to use
-  * `PERPLEXITY_API_KEY` - the perplexity API key to use
-  * `MAX_WEB_RESEARCH_LOOPS` - the maximum number of research loop steps, defaults to `3`
-  * `FETCH_FULL_PAGE` - fetch the full page content if using `duckduckgo` for the search API, defaults to `false`
-
-5. (Recommended) Create a virtual environment:
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-6. Launch the assistant with the LangGraph server:
+3. Launch the assistant with the LangGraph server:
 
 ```bash
 # Install uv package manager
@@ -94,25 +56,11 @@ ollama pull deepseek-r1:8b
 git clone https://github.com/langchain-ai/ollama-deep-researcher.git
 cd ollama-deep-researcher
 ```
- 
-4. Select a web search tool, as above.
 
-5. (Recommended) Create a virtual environment: Install `Python 3.11` (and add to PATH during installation). Restart your terminal to ensure Python is available, then create and activate a virtual environment:
+4. Launch the assistant with the LangGraph server:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-6. Launch the assistant with the LangGraph server:
-
-```powershell
-# Install dependencies
-pip install -e .
-pip install langgraph-cli[inmem]
-
-# Start the LangGraph server
-langgraph dev
+uv run langgraph dev
 ```
 
 ### Using the LangGraph Studio UI
@@ -226,3 +174,109 @@ URL: https://smith.langchain.com/studio/?baseUrl=http://0.0.0.0:2024
 ...but the browser will not launch from the container.
 
 Instead, visit this link with the correct baseUrl IP address: [`https://smith.langchain.com/studio/thread?baseUrl=http://127.0.0.1:2024`](https://smith.langchain.com/studio/thread?baseUrl=http://127.0.0.1:2024)
+
+
+
+===================================
+
+## Using QDrant for Local RAG
+
+This agent supports local RAG (Retrieval Augmented Generation) using QDrant vector database.
+
+### Setup QDrant
+
+1. Start QDrant (using Docker):
+   ```bash
+   docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_data:/qdrant/storage qdrant/qdrant
+   ```
+
+2. Index your documents:  (skip if you have already indexed your documents)
+   ```bash
+   python -m src.assistant.qdrant_loader --directory /path/to/your/documents --collection DnD_Documents
+   ```
+
+### Configuration
+
+Set the following environment variables to configure QDrant:
+
+- `QDRANT_HOST`: QDrant server host (default: "localhost")
+- `QDRANT_PORT`: QDrant server port (default: "6333")
+- `QDRANT_COLLECTION`: Collection name (default: "DnD_Documents")
+- `QDRANT_TOP_K`: Number of results to retrieve (default: 5)
+- `USE_RAG`: Enable/disable RAG (default: True)
+- `EMBEDDINGS_MODEL`: HuggingFace model for embeddings (default: "all-MiniLM-L6-v2")
+
+The agent will now:
+1. Generate a search query
+2. Query the local QDrant database for relevant documents
+3. Query the web for additional information
+4. Summarize both local and web sources
+5. Continue with the existing reflection and follow-up process
+
+
+===================================
+
+project_root/
+├── src/
+│   └── assistant/
+│       ├── __init__.py
+│       ├── graph.py
+│       ├── utils.py
+│       └── utils_qdrant.py
+├── reindex_dnd_feats.py
+├── simple_test_qdrant.py
+├── test_utils_qdrant.py
+└── inspect_indexed_feats.py
+
+Files Required to Run LangGraph Studio
+To run LangGraph Studio with your RAG-enabled application, you need several key files. Let me explain what each file does and which ones are essential:
+
+Essential Files
+1. src/assistant/graph.py
+- Purpose: Defines your LangGraph application structure
+- Content: Contains the graph definition, nodes, and edges
+- Importance: Critical - this is the main entry point for LangGraph Studio
+
+2. src/assistant/utils_qdrant.py
+- Purpose: Provides QDrant vector database integration
+- Content: Contains functions to query QDrant for relevant documents
+- Importance: Essential for RAG functionality
+
+3. src/assistant/utils.py
+- Purpose: Contains utility functions used by the graph
+- Content: May include helper functions, data processing, etc.
+- Importance: Essential if referenced by graph.py
+
+4. src/assistant/_init_.py
+- Purpose: Makes the assistant directory a proper Python package
+- Content: Usually empty or contains minimal imports
+- Importance: Required for proper Python package structure
+
+Supporting Files (Not Directly Used by LangGraph Studio)
+5. reindex_dnd_feats.py
+- Purpose: Indexes your D&D feats data into QDrant
+- Content: Script to process and store data in QDrant
+- Importance: Used once to set up the vector database, not needed for runtime
+
+6. inspect_indexed_feats.py
+- Purpose: Helps inspect the data in your QDrant collection
+- Content: Diagnostic tool to view indexed documents
+- Importance: Useful for debugging, not needed for runtime
+
+7. simple_test_qdrant.py
+- Purpose: Tests QDrant integration outside of LangGraph
+- Content: Simple script to verify QDrant queries work
+- Importance: Useful for testing, not needed for runtime
+
+8. test_utils_qdrant.py
+- Purpose: Tests the utils_qdrant.py functionality
+- Content: Test script for QDrant integration
+- Importance: Useful for testing, not needed for runtime
+
+Running LangGraph Studio
+
+To run LangGraph Studio with your application:
+This command:
+
+uvx --refresh --from "langgraph-cli[inmem]" --with-editable . --python 3.11 langgraph dev
+

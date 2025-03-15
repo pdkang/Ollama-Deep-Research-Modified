@@ -8,9 +8,10 @@ from langchain_ollama import ChatOllama
 from langgraph.graph import START, END, StateGraph
 
 from assistant.configuration import Configuration, SearchAPI
-from assistant.utils import deduplicate_and_format_sources, tavily_search, format_sources, perplexity_search, duckduckgo_search
+from assistant.utils_0 import deduplicate_and_format_sources, tavily_search, format_sources, perplexity_search, duckduckgo_search, query_qdrant
 from assistant.state import SummaryState, SummaryStateInput, SummaryStateOutput
 from assistant.prompts import query_writer_instructions, summarizer_instructions, reflection_instructions
+from assistant.utils_qdrant import query_qdrant
 
 # Nodes
 def generate_query(state: SummaryState, config: RunnableConfig):
@@ -29,6 +30,36 @@ def generate_query(state: SummaryState, config: RunnableConfig):
     query = json.loads(result.content)
 
     return {"search_query": query['query']}
+
+
+def rag_research(state: SummaryState, config: RunnableConfig):
+    """ Gather information from local RAG using QDrant """
+    
+    # Configure
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Skip RAG if disabled
+    if not configurable.use_rag:
+        return {"rag_research_results": []}
+    
+    # Query QDrant
+    search_results = query_qdrant(
+        state.search_query, 
+        collection_name=configurable.qdrant_collection,
+        top_k=configurable.qdrant_top_k
+    )
+    
+    # Format results
+    if search_results and search_results.get("results"):
+        search_str = deduplicate_and_format_sources(
+            search_results, 
+            max_tokens_per_source=1000, 
+            include_raw_content=True
+        )
+        return {"rag_research_results": [search_str]}
+    else:
+        return {"rag_research_results": ["No relevant documents found in local knowledge base."]}
+
 
 def web_research(state: SummaryState, config: RunnableConfig):
     """ Gather information from the web """
@@ -67,6 +98,9 @@ def summarize_sources(state: SummaryState, config: RunnableConfig):
 
     # Most recent web research
     most_recent_web_research = state.web_research_results[-1]
+    
+    # RAG research results
+    rag_results = state.rag_research_results[0] if state.rag_research_results else "No local knowledge base results."
 
     # Build the human message
     if existing_summary:
@@ -78,7 +112,8 @@ def summarize_sources(state: SummaryState, config: RunnableConfig):
     else:
         human_message_content = (
             f"<User Input> \n {state.research_topic} \n <User Input>\n\n"
-            f"<Search Results> \n {most_recent_web_research} \n <Search Results>"
+            f"<Local Knowledge Base Results> \n {rag_results} \n <Local Knowledge Base Results>\n\n"
+            f"<Web Search Results> \n {most_recent_web_research} \n <Web Search Results>"
         )
 
     # Run the LLM
@@ -144,6 +179,7 @@ def route_research(state: SummaryState, config: RunnableConfig) -> Literal["fina
 # Add nodes and edges
 builder = StateGraph(SummaryState, input=SummaryStateInput, output=SummaryStateOutput, config_schema=Configuration)
 builder.add_node("generate_query", generate_query)
+builder.add_node("rag_research", rag_research)
 builder.add_node("web_research", web_research)
 builder.add_node("summarize_sources", summarize_sources)
 builder.add_node("reflect_on_summary", reflect_on_summary)
@@ -151,7 +187,8 @@ builder.add_node("finalize_summary", finalize_summary)
 
 # Add edges
 builder.add_edge(START, "generate_query")
-builder.add_edge("generate_query", "web_research")
+builder.add_edge("generate_query", "rag_research")
+builder.add_edge("rag_research", "web_research")
 builder.add_edge("web_research", "summarize_sources")
 builder.add_edge("summarize_sources", "reflect_on_summary")
 builder.add_conditional_edges("reflect_on_summary", route_research)

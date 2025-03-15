@@ -162,6 +162,11 @@ Instead, visit this link with the correct baseUrl IP address: [`https://smith.la
 
 This agent supports local RAG (Retrieval Augmented Generation) using QDrant vector database.
 
+### fix qdrant_client not found error
+
+1. uv add qdrant-client
+2. uv add sentence-transformers
+
 ### Setup QDrant
 
 1. Start QDrant (using Docker):
